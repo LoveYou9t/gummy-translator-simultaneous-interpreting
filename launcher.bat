@@ -1,5 +1,5 @@
 @echo off
 D:
-cd D:\Repositories\gummy-translator
+cd C:\Users\9t\gummy-translator
 python gummy_translator.py
 pause

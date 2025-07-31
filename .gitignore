@@ -1,0 +1,18 @@
+# Python Caches
+__pycache__/
+*.pyc
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.exe
+*.spec
+
+# User-generated files or backups
+mic_audio.pcm
+gummy_translator_backup.py
+
+# IDE configuration
+.idea/
+.vscode/

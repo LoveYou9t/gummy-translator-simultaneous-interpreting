@@ -19,6 +19,34 @@
 
     登录阿里云账号后，您还需要开通阿里云百炼模型服务。有关开通阿里云百炼模型服务的操作，请参见[开通阿里云百炼大模型服务平台](https://help.aliyun.com/zh/model-studio/getting-started/activate-alibaba-cloud-model-studio)。
 
+# PREREQUISITES
+
+## 系统要求
+- Windows 10/11
+- Python 3.8 及以上
+
+## 依赖软件
+- **FFmpeg**（推荐，系统音频采集必备）
+    - 下载地址：https://www.gyan.dev/ffmpeg/builds/
+    - 安装后将 ffmpeg.exe 路径加入系统 PATH，或在设置中手动指定
+- **DashScope API Key**
+    - 注册并获取：https://help.aliyun.com/zh/dashscope/developer-reference/quickstart-2
+- **SiliconFlow API Key**（TTS 语音合成）
+    - 注册获取：https://www.siliconflow.cn/
+- **虚拟音频设备**（可选，系统音频采集辅助）
+    - VB-CABLE：https://vb-audio.com/Cable/
+    - VoiceMeeter：https://vb-audio.com/Voicemeeter/
+
+## Python 依赖
+- 见 requirements.txt
+- 推荐使用 pip 安装：
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+## 其他建议
+- 若需 sounddevice 采集音频，需安装 sounddevice 和 numpy
+- 建议使用管理员权限运行以获得完整音频设备访问权限
 
 1. ### 创建阿里云百炼模型服务API-KEY并将其配置环境变量
 

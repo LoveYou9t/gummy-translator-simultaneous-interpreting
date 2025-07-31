@@ -2,3 +2,17 @@ dashscope
 pyaudio
 wxPython
 requests
+
+# 系统音频捕获的可选依赖 - 选择其中一种安装
+# 方案1: Python库方式（推荐新手）
+sounddevice>=0.4.0   # Python音频捕获库
+numpy>=1.21.0        # 音频数据处理
+
+# 方案2: FFmpeg方式（推荐高级用户）
+# 需要单独安装FFmpeg到系统PATH
+# winget install FFmpeg
+# 或从 https://www.gyan.dev/ffmpeg/builds/ 下载
+
+# 方案3: 虚拟音频设备
+# 下载VB-CABLE: https://vb-audio.com/Cable/
+# 或VoiceMeeter: https://vb-audio.com/Voicemeeter/
