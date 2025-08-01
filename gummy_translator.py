@@ -1647,7 +1647,11 @@ class FloatingSubtitleWindow(wx.Frame):
         
         # 创建状态栏
         self.status_bar = self.CreateStatusBar(1)
+        # 设置状态栏高度为0以便完全隐藏
+        self.status_bar.SetMinHeight(0)
         self.update_status_bar()
+        # 初始时隐藏状态栏
+        self.status_bar.Show(False)
         
         self.panel.SetSizer(self.main_sizer)
         
@@ -1678,8 +1682,25 @@ class FloatingSubtitleWindow(wx.Frame):
         self.Bind(wx.EVT_TIMER, self.check_mouse_position, self.mouse_check_timer)
         self.mouse_check_timer.Start(100)  # 100毫秒间隔
 
+        # 初始化时立即检查鼠标位置来设置正确的状态
+        wx.CallAfter(self.initial_mouse_check)
+
         self.Center()
         self.Show()
+
+    def initial_mouse_check(self):
+        """初始化时检查鼠标位置"""
+        x, y = wx.GetMousePosition()
+        rect = self.GetScreenRect()
+        if not rect.Contains(wx.Point(x, y)):
+            # 鼠标不在窗口内，隐藏标题栏和状态栏
+            self.SetWindowStyleFlag(self.GetWindowStyleFlag() & ~wx.CAPTION)
+            self.has_titlebar = False
+            self.status_bar.Show(False)
+            self.status_bar.SetSize((-1, 0))
+            self.SendSizeEvent()
+            self.Layout()
+            self.Refresh()
 
 
     def check_mouse_position(self, event):
@@ -1691,12 +1712,24 @@ class FloatingSubtitleWindow(wx.Frame):
                 #print("Mouse left the window (timer)")
                 self.SetWindowStyleFlag(self.GetWindowStyleFlag() & ~wx.CAPTION)
                 self.has_titlebar = False
+                # 隐藏状态栏并设置高度为0
+                self.status_bar.Show(False)
+                self.status_bar.SetSize((-1, 0))
+                # 强制重新布局以完全隐藏状态栏
+                self.SendSizeEvent()
+                self.Layout()
                 self.Refresh()
         else:
             if not self.has_titlebar:
                 #print("Mouse in the window (timer)")
                 self.SetWindowStyleFlag(self.GetWindowStyleFlag() | wx.CAPTION)
                 self.has_titlebar = True
+                # 显示状态栏并恢复正常高度
+                self.status_bar.SetSize((-1, -1))
+                self.status_bar.Show(True)
+                # 强制重新布局以显示状态栏
+                self.SendSizeEvent()
+                self.Layout()
                 self.Refresh()
     
     on_mouse_enter = None  # 移除鼠标进入事件处理
@@ -1717,10 +1750,25 @@ class FloatingSubtitleWindow(wx.Frame):
     def create_language_panel(self, title, text_box_name):
         panel = wx.Panel(self.panel)
 
+        # 创建一个没有滚动条的RichTextCtrl
         text_box = rt.RichTextCtrl(
             panel,
             style=wx.NO_BORDER | rt.RE_READONLY | rt.RE_MULTILINE
         )
+        
+        # 尝试隐藏滚动条（如果支持的话）
+        try:
+            # 对于某些版本的wxPython，可能有这个方法
+            if hasattr(text_box, 'ShowScrollbars'):
+                text_box.ShowScrollbars(wx.SHOW_SB_NEVER, wx.SHOW_SB_NEVER)
+            elif hasattr(text_box, 'SetScrollbar'):
+                # 尝试另一种方法
+                text_box.SetScrollbar(wx.VERTICAL, 0, 0, 0)
+                text_box.SetScrollbar(wx.HORIZONTAL, 0, 0, 0)
+        except:
+            # 如果都不支持，就使用默认的滚动行为
+            pass
+        
         # text_box = stc.StyledTextCtrl(
         #     panel,
         #     style=wx.NO_BORDER
@@ -1911,9 +1959,21 @@ class FloatingSubtitleWindow(wx.Frame):
         if self.has_titlebar:
             self.SetWindowStyle(self.GetWindowStyle() & ~wx.CAPTION)
             self.has_titlebar = False
+            # 隐藏状态栏并设置高度为0
+            self.status_bar.Show(False)
+            self.status_bar.SetSize((-1, 0))
+            # 强制重新布局以完全隐藏状态栏
+            self.SendSizeEvent()
+            self.Layout()
         else:
             self.SetWindowStyle(self.GetWindowStyle() | wx.CAPTION)
             self.has_titlebar = True
+            # 显示状态栏并恢复正常高度
+            self.status_bar.SetSize((-1, -1))
+            self.status_bar.Show(True)
+            # 强制重新布局以显示状态栏
+            self.SendSizeEvent()
+            self.Layout()
         self.Refresh()
 
     def toggle_audio_source(self):
