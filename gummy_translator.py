@@ -16,14 +16,6 @@ from dashscope.audio.tts_v2 import *
 import requests
 import ctypes  # 导入 ctypes 库
 
-# 尝试导入sounddevice作为备用方案
-try:
-    import sounddevice as sd
-    import numpy as np
-    SOUNDDEVICE_AVAILABLE = True
-except ImportError:
-    SOUNDDEVICE_AVAILABLE = False
-
 # Add a global variable to control TTS
 enable_tts = False
 
@@ -39,10 +31,10 @@ need_restart_translator = False  # 标记是否需要重启translator
 
 # Add global variables for audio source control
 audio_source = 'system'  # 'microphone' or 'system' - 默认使用系统音频
-current_system_device = None  # 当前选择的系统音频设备
+current_system_device = None  # 当前选择的系统音频设备(索引)
+current_system_device_name = None  # 当前选择的系统音频设备名称
 ffmpeg_process = None  # FFmpeg进程
 system_audio_queue = queue.Queue()  # 系统音频数据队列
-sounddevice_stream = None  # sounddevice流对象
 ffmpeg_path = None  # 自定义FFmpeg路径
 
 # 配置文件路径
@@ -57,6 +49,7 @@ DEFAULT_CONFIG = {
     'target_language': 'zh',
     'tts_voice': 'FunAudioLLM/CosyVoice2-0.5B:alex',
     'current_system_device': None,
+    'current_system_device_name': None,
     'enable_tts': False,
     'asr_model': 'gummy-realtime-v1',  # 默认ASR模型
     'api': {
@@ -69,7 +62,7 @@ config = DEFAULT_CONFIG.copy()
 
 def load_config():
     """加载配置文件"""
-    global config, audio_source, ffmpeg_path, target_language, current_system_device, enable_tts, enable_api_calls
+    global config, audio_source, ffmpeg_path, target_language, current_system_device, current_system_device_name, enable_tts, enable_api_calls
     
     try:
         if os.path.exists(CONFIG_FILE):
@@ -88,6 +81,7 @@ def load_config():
     ffmpeg_path = config.get('ffmpeg_path', None)
     target_language = config.get('target_language', 'zh')
     current_system_device = config.get('current_system_device', None)
+    current_system_device_name = config.get('current_system_device_name', None)
     enable_tts = config.get('enable_tts', False)
     enable_api_calls = config.get('api', {}).get('enabled', True)
 
@@ -100,6 +94,7 @@ def save_config():
     config['ffmpeg_path'] = ffmpeg_path
     config['target_language'] = target_language
     config['current_system_device'] = current_system_device
+    config['current_system_device_name'] = current_system_device_name
     config['enable_tts'] = enable_tts
     # asr_model会在设置对话框中更新，这里不需要修改
     
@@ -126,10 +121,42 @@ def init_dashscope_api_key():
     if 'DASHSCOPE_API_KEY' in os.environ:
         dashscope.api_key = os.environ['DASHSCOPE_API_KEY']
         config['dashscope_api_key'] = os.environ['DASHSCOPE_API_KEY']
+        print(f"✅ 使用环境变量中的DashScope API Key")
     elif config.get('dashscope_api_key') and config['dashscope_api_key'] != '<your-dashscope-api-key>':
         dashscope.api_key = config['dashscope_api_key']
+        print(f"✅ 使用配置文件中的DashScope API Key")
     else:
         dashscope.api_key = '<your-dashscope-api-key>'  # set API-key manually
+        print(f"❌ 警告: DashScope API Key未配置！请设置正确的API密钥")
+    
+    # 检查API调用是否启用
+    if not enable_api_calls:
+        print(f"⚠️  警告: API调用已禁用，translator不会处理音频数据")
+    else:
+        print(f"✅ API调用已启用")
+
+def check_api_status():
+    """检查API状态"""
+    print("\n" + "=" * 50)
+    print("🔍 API状态检查")
+    print("=" * 50)
+    
+    # 检查enable_api_calls状态
+    print(f"API调用启用状态: {'✅ 启用' if enable_api_calls else '❌ 禁用'}")
+    
+    # 检查DashScope API Key
+    api_key_status = "未设置"
+    if hasattr(dashscope, 'api_key') and dashscope.api_key:
+        if dashscope.api_key != '<your-dashscope-api-key>':
+            api_key_status = f"✅ 已设置 ({dashscope.api_key[:10]}...)"
+        else:
+            api_key_status = "❌ 默认值，需要配置"
+    print(f"DashScope API Key: {api_key_status}")
+    
+    # 检查目标语言
+    print(f"翻译目标语言: {target_language}")
+    
+    print("=" * 50)
 
 # Set the target language for translation
 target_language = 'zh'
@@ -189,6 +216,84 @@ def get_ffmpeg_command():
     if ffmpeg_path is None:
         check_ffmpeg()
     return ffmpeg_path or 'ffmpeg'
+
+def test_vb_cable():
+    """测试VB-Cable设备连接"""
+    print("\n" + "=" * 60)
+    print("🧪 VB-Cable连接测试")
+    print("=" * 60)
+    
+    vb_found, vb_devices = check_vb_cable()
+    
+    if not vb_found:
+        print("❌ 未找到VB-Cable设备，无法进行测试")
+        return False
+    
+    # 查找输入设备（用于录音）
+    input_devices = [d for d in vb_devices if d['type'] == 'input' and d['channels'] > 0]
+    
+    if not input_devices:
+        print("❌ 未找到VB-Cable输入设备")
+        return False
+    
+    test_device = input_devices[0]
+    print(f"🎯 测试设备: {test_device['name']}")
+    print("📝 测试说明:")
+    print("  1. 确保你的音频播放设备设置为VB-Cable Output")
+    print("  2. 播放一些音频（音乐、视频等）")
+    print("  3. 测试将运行5秒钟检测音频数据")
+    print()
+    
+    input("按回车键开始测试...")
+    
+    try:
+        p = pyaudio.PyAudio()
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=16000,
+            input=True,
+            input_device_index=test_device['index'],
+            frames_per_buffer=1024
+        )
+        
+        print("🎵 开始监听VB-Cable音频...")
+        data_count = 0
+        start_time = time.time()
+        
+        while time.time() - start_time < 5:
+            try:
+                data = stream.read(1024, exception_on_overflow=False)
+                if data:
+                    data_count += 1
+                    if data_count % 20 == 0:  # 每秒显示一次
+                        print(f"⏱️  已接收 {data_count} 个音频数据包...")
+            except Exception as e:
+                print(f"读取音频数据时出错: {e}")
+                break
+        
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        
+        print(f"\n📊 测试结果:")
+        print(f"  接收的数据包数量: {data_count}")
+        
+        if data_count > 0:
+            print("✅ VB-Cable测试成功！")
+            print("  VB-Cable可以正常接收音频数据")
+            return True
+        else:
+            print("❌ VB-Cable测试失败！")
+            print("  可能的原因:")
+            print("  1. 音频播放设备未设置为VB-Cable Output")
+            print("  2. 系统没有播放音频")
+            print("  3. VB-Cable驱动程序问题")
+            return False
+            
+    except Exception as e:
+        print(f"❌ 测试过程出错: {e}")
+        return False
 
 def test_audio_capture():
     """测试音频捕获功能"""
@@ -255,6 +360,10 @@ def list_all_audio_devices():
     print("🔍 检测系统音频设备")
     print("=" * 60)
     
+    # 0. 检查VB-Cable
+    print("\n🎛️ VB-Cable检测:")
+    check_vb_cable()
+    
     # 1. 检查FFmpeg设备
     print("\n📺 FFmpeg DirectShow 设备:")
     ffmpeg_devices = get_windows_audio_devices()
@@ -278,28 +387,26 @@ def list_all_audio_devices():
             if device_info['maxOutputChannels'] > 0:
                 device_type += "输出 "
             
-            print(f"  {i}: {device_info['name']} ({device_type})")
+            # 特别标记VB-Cable设备
+            device_name = device_info['name']
+            vb_indicator = ""
+            if any(keyword in device_name.lower() for keyword in ['cable', 'vb-audio', 'vb-cable']):
+                vb_indicator = " [VB-Cable]"
+            
+            print(f"  {i}: {device_name} ({device_type}){vb_indicator}")
         
         p.terminate()
     except Exception as e:
         print(f"  获取PyAudio设备失败: {e}")
     
-    # 3. 检查sounddevice设备
-    if SOUNDDEVICE_AVAILABLE:
-        print("\n🔊 Sounddevice 设备:")
-        try:
-            devices = sd.query_devices()
-            for i, device in enumerate(devices):
-                device_type = ""
-                if device['max_input_channels'] > 0:
-                    device_type += "输入 "
-                if device['max_output_channels'] > 0:
-                    device_type += "输出 "
-                print(f"  {i}: {device['name']} ({device_type})")
-        except Exception as e:
-            print(f"  获取sounddevice设备失败: {e}")
+    # 3. 检查虚拟音频设备
+    print("\n🔄 虚拟音频设备:")
+    virtual_devices = get_virtual_audio_devices()
+    if virtual_devices:
+        for device in virtual_devices:
+            print(f"  {device['index']}: {device['name']}")
     else:
-        print("\n🔊 Sounddevice: 不可用")
+        print("  未检测到虚拟音频设备")
     
     print("\n" + "=" * 60)
 
@@ -308,6 +415,10 @@ def show_audio_source_selection():
     # 检查FFmpeg状态
     ffmpeg_available = check_ffmpeg()
     ffmpeg_status = "✅ 可用" if ffmpeg_available else "❌ 不可用"
+    
+    # 检查VB-Cable状态
+    vb_found, vb_devices = check_vb_cable()
+    vb_status = "✅ 已安装" if vb_found else "❌ 未安装"
     
     print()
     print("=" * 60)
@@ -319,27 +430,36 @@ def show_audio_source_selection():
     print("   - 适用于用户直接说话的场景")
     print("   - 稳定可靠，无需额外配置")
     print()
-    print(f"🔊 选项2: 系统音频 (FFmpeg: {ffmpeg_status})")
+    print(f"🔊 选项2: 系统音频 (FFmpeg: {ffmpeg_status}, VB-Cable: {vb_status})")
     print("   - 捕获电脑播放的音频")
     print("   - 适用于翻译视频、音乐等系统声音")
     print("   - 需要FFmpeg或虚拟音频设备支持")
+    if vb_found:
+        print(f"   - 检测到 {len(vb_devices)} 个VB-Cable设备，推荐用于虚拟机测试")
     print()
     print("=" * 60)
     
     while True:
         try:
-            choice = input("请输入选择 (1=麦克风, 2=系统音频, q=退出): ").strip().lower()
+            choice = input("请输入选择 (1=麦克风, 2=系统音频, t=测试VB-Cable, q=退出): ").strip().lower()
             
             if choice == 'q' or choice == 'quit':
                 print("用户选择退出程序")
                 return None
+            elif choice == 't' or choice == 'test':
+                if vb_found:
+                    test_vb_cable()
+                else:
+                    print("❌ 未检测到VB-Cable设备，无法进行测试")
+                    print("💡 请先安装VB-Cable: https://vb-audio.com/Cable/")
+                continue
             elif choice == '1' or choice == 'mic' or choice == 'microphone':
                 print("✅ 已选择: 麦克风录音")
                 return 'microphone'
             elif choice == '2' or choice == 'system':
                 print("✅ 已选择: 系统音频")
                 
-                if not ffmpeg_available:
+                if not ffmpeg_available and not vb_found:
                     print()
                     print("⚠️  注意: 系统音频捕获需要额外组件支持")
                     print("-" * 50)
@@ -347,12 +467,10 @@ def show_audio_source_selection():
                     print("  • winget install FFmpeg")
                     print("  • 或手动下载: https://www.gyan.dev/ffmpeg/builds/")
                     print()
-                    print("🐍 方案2: 安装Python库")
-                    print("  • pip install sounddevice numpy")
-                    print()
-                    print("🔌 方案3: 虚拟音频设备")
+                    print("🎛️ 方案2: 虚拟音频设备")
                     print("  • VB-CABLE: https://vb-audio.com/Cable/")
                     print("  • VoiceMeeter: https://vb-audio.com/Voicemeeter/")
+                    print("  • 特别适合虚拟机环境测试")
                     print("-" * 50)
                     print()
                     
@@ -367,9 +485,11 @@ def show_audio_source_selection():
                         else:
                             print("请输入 y 或 n")
                 else:
+                    if vb_found:
+                        print(f"✅ 检测到VB-Cable设备，适合虚拟机环境")
                     return 'system'
             else:
-                print("❌ 无效选择，请输入 1、2 或 q")
+                print("❌ 无效选择，请输入 1、2、t 或 q")
                 
         except KeyboardInterrupt:
             print("\n用户中断程序")
@@ -507,16 +627,55 @@ def start_ffmpeg_audio_capture(device_name=None):
             ]
         })
         
-        # 方法3: DirectShow Stereo Mix
-        if device_name is None:
-            device_name = "立体声混音 (Realtek(R) Audio)"  # 常见的立体声混音名称
+        # 方法3: 用户指定的DirectShow设备（如果有的话）
+        if device_name is not None:
+            capture_methods.append({
+                'name': f'DirectShow - {device_name}',
+                'cmd': [
+                    get_ffmpeg_command(),
+                    '-f', 'dshow',
+                    '-i', f'audio={device_name}',
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    '-ac', '1',
+                    '-loglevel', 'info',
+                    '-f', 'wav',
+                    'pipe:1'
+                ]
+            })
         
+        # 方法4: VB-Cable虚拟音频设备（适用于虚拟机测试）
+        vb_cable_names = [
+            "CABLE Output (VB-Audio Virtual Cable)",
+            "VB-Cable",
+            "CABLE-A Output (VB-Audio Cable A)",
+            "CABLE-B Output (VB-Audio Cable B)"
+        ]
+        
+        for vb_name in vb_cable_names:
+            capture_methods.append({
+                'name': f'DirectShow - {vb_name}',
+                'cmd': [
+                    get_ffmpeg_command(),
+                    '-f', 'dshow',
+                    '-i', f'audio={vb_name}',
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    '-ac', '1',
+                    '-loglevel', 'info',
+                    '-f', 'wav',
+                    'pipe:1'
+                ]
+            })
+        
+        # 方法5: 默认立体声混音设备
+        default_device_name = "立体声混音 (Realtek(R) Audio)"
         capture_methods.append({
-            'name': f'DirectShow - {device_name}',
+            'name': f'DirectShow - {default_device_name}',
             'cmd': [
                 get_ffmpeg_command(),
                 '-f', 'dshow',
-                '-i', f'audio={device_name}',
+                '-i', f'audio={default_device_name}',
                 '-acodec', 'pcm_s16le',
                 '-ar', '16000',
                 '-ac', '1',
@@ -526,7 +685,7 @@ def start_ffmpeg_audio_capture(device_name=None):
             ]
         })
         
-        # 方法4: 尝试其他常见的立体声混音设备名称
+        # 方法6: 尝试其他常见的立体声混音设备名称
         common_stereo_mix_names = [
             "Stereo Mix",
             "立体声混音",
@@ -658,94 +817,100 @@ def stop_ffmpeg_audio_capture():
         finally:
             ffmpeg_process = None
 
-# Sounddevice backup functions
-def start_sounddevice_capture():
-    """使用sounddevice捕获系统音频（备用方案）"""
-    global sounddevice_stream, system_audio_queue
-    
-    if not SOUNDDEVICE_AVAILABLE:
-        return False
-    
+def find_audio_device_by_name(device_name):
+    """通过设备名称查找音频设备索引"""
     try:
-        def audio_callback(indata, frames, time_info, status):
-            """音频回调函数"""
-            if status:
-                print(f"Sounddevice status: {status}")
-            
-            # 转换numpy数组到bytes
-            audio_data = (indata * 32767).astype(np.int16).tobytes()
-            system_audio_queue.put(audio_data)
-        
-        # 启动录音流
-        sounddevice_stream = sd.InputStream(
-            device=current_system_device,
-            channels=1,
-            samplerate=16000,
-            dtype=np.float32,
-            blocksize=1600,  # 0.1秒的数据块
-            callback=audio_callback
-        )
-        
-        sounddevice_stream.start()
-        print("Sounddevice系统音频捕获已启动")
-        return True
-        
+        p = pyaudio.PyAudio()
+        for i in range(p.get_device_count()):
+            device_info = p.get_device_info_by_index(i)
+            if device_info['maxInputChannels'] > 0 and device_info['name'] == device_name:
+                p.terminate()
+                return i
+        p.terminate()
+        return None
     except Exception as e:
-        print(f"启动sounddevice捕获失败: {e}")
-        return False
+        print(f"查找音频设备失败: {e}")
+        return None
 
-def stop_sounddevice_capture():
-    """停止sounddevice音频捕获"""
-    global sounddevice_stream
-    
-    if sounddevice_stream:
-        try:
-            sounddevice_stream.stop()
-            sounddevice_stream.close()
-        except Exception as e:
-            print(f"停止sounddevice流出错: {e}")
-        finally:
-            sounddevice_stream = None
-
-def get_sounddevice_devices():
-    """获取sounddevice音频设备列表"""
-    if not SOUNDDEVICE_AVAILABLE:
-        return []
-    
+def check_vb_cable():
+    """检查是否安装了VB-Cable"""
     try:
-        devices = sd.query_devices()
-        device_list = []
+        p = pyaudio.PyAudio()
+        vb_cable_found = False
+        vb_devices = []
         
-        for i, device in enumerate(devices):
-            if device['max_input_channels'] > 0:
-                device_list.append({
+        for i in range(p.get_device_count()):
+            device_info = p.get_device_info_by_index(i)
+            device_name = device_info['name'].lower()
+            
+            # 检查VB-Cable相关设备
+            vb_indicators = ['cable', 'vb-audio', 'vb-cable']
+            if any(indicator in device_name for indicator in vb_indicators):
+                vb_cable_found = True
+                vb_devices.append({
                     'index': i,
-                    'name': device['name'],
-                    'sample_rate': int(device['default_samplerate']),
-                    'type': 'sounddevice'
+                    'name': device_info['name'],
+                    'channels': device_info['maxInputChannels'],
+                    'type': 'input' if device_info['maxInputChannels'] > 0 else 'output'
                 })
         
-        return device_list
+        p.terminate()
+        
+        if vb_cable_found:
+            print("✅ 检测到VB-Cable虚拟音频设备:")
+            for device in vb_devices:
+                print(f"  - {device['name']} ({device['type']}, {device['channels']}通道)")
+        else:
+            print("❌ 未检测到VB-Cable设备")
+            print("💡 建议安装VB-Cable以支持虚拟机音频测试:")
+            print("   下载地址: https://vb-audio.com/Cable/")
+        
+        return vb_cable_found, vb_devices
+        
     except Exception as e:
-        print(f"获取sounddevice设备失败: {e}")
-        return []
+        print(f"检查VB-Cable时出错: {e}")
+        return False, []
 
-# Function to get VB-Cable or Virtual Audio Cable devices
+# Function to get virtual audio devices
 def get_virtual_audio_devices():
     """获取虚拟音频设备（VB-CABLE, Virtual Audio Cable等）"""
     devices = get_system_audio_devices()
     virtual_devices = []
     
-    # 常见虚拟音频设备关键词
-    virtual_keywords = ['vb-cable', 'virtual audio cable', 'voicemeeter', 
-                       'cable', 'virtual', 'vac', 'line', 'aux']
+    # 常见虚拟音频设备关键词，增加VB-Cable相关
+    virtual_keywords = [
+        'vb-cable', 'vb-audio', 'virtual audio cable', 'voicemeeter', 
+        'cable', 'virtual', 'vac', 'line', 'aux',
+        'cable output', 'cable input', 'cable-a', 'cable-b'
+    ]
+    
+    # VB-Cable特定设备名称
+    vb_cable_names = [
+        "CABLE Output (VB-Audio Virtual Cable)",
+        "CABLE Input (VB-Audio Virtual Cable)", 
+        "VB-Cable",
+        "CABLE-A Output (VB-Audio Cable A)",
+        "CABLE-A Input (VB-Audio Cable A)",
+        "CABLE-B Output (VB-Audio Cable B)",
+        "CABLE-B Input (VB-Audio Cable B)"
+    ]
     
     for device in devices:
         if device['type'] == 'input':
-            device_name_lower = device['name'].lower()
+            device_name = device['name']
+            device_name_lower = device_name.lower()
+            
+            # 优先检查VB-Cable特定设备名称
+            if any(vb_name.lower() in device_name_lower for vb_name in vb_cable_names):
+                virtual_devices.append(device)
+                print(f"检测到VB-Cable设备: {device_name}")
+                continue
+            
+            # 检查其他虚拟音频设备关键词
             for keyword in virtual_keywords:
                 if keyword in device_name_lower:
                     virtual_devices.append(device)
+                    print(f"检测到虚拟音频设备: {device_name}")
                     break
     
     return virtual_devices
@@ -782,26 +947,6 @@ def get_system_audio_devices():
     except Exception as e:
         print(f"获取音频设备列表失败: {e}")
         return []
-
-# Function to find stereo mix or similar loopback devices
-def find_loopback_devices():
-    """查找环回录音设备（如立体声混音）"""
-    devices = get_system_audio_devices()
-    loopback_devices = []
-    
-    # 常见的环回录音设备名称关键词
-    loopback_keywords = ['stereo mix', 'what u hear', 'wave out mix', 'mixed output', 
-                        '立体声混音', '您听到的声音', '混合输出', 'loopback']
-    
-    for device in devices:
-        if device['type'] == 'input':
-            device_name_lower = device['name'].lower()
-            for keyword in loopback_keywords:
-                if keyword in device_name_lower:
-                    loopback_devices.append(device)
-                    break
-    
-    return loopback_devices
 
 # Lock for controlling access to the PyAudio stream
 pyaudio_lock = threading.Lock()
@@ -923,6 +1068,7 @@ def gummyAsrTask():
             global audio_stream
             global audio_source
             global current_system_device
+            global current_system_device_name
             
             with pyaudio_lock:
                 print('TranslationRecognizerCallback open.')
@@ -942,11 +1088,23 @@ def gummyAsrTask():
                     
                     if check_ffmpeg():
                         device_name = None
-                        if current_system_device is not None:
-                            # 如果选择了特定设备
+                        
+                        # 优先使用保存的设备名称
+                        if current_system_device_name is not None:
+                            device_name = current_system_device_name
+                            print(f"使用配置中保存的音频设备: {device_name}")
+                        elif current_system_device is not None:
+                            # 如果只有索引，尝试通过索引获取设备名称
                             devices = get_windows_audio_devices()
                             if current_system_device < len(devices):
                                 device_name = devices[current_system_device]['name']
+                                # 同时保存设备名称以备下次使用
+                                current_system_device_name = device_name
+                                # 自动保存到配置文件
+                                save_config()
+                                print(f"通过索引获取到音频设备: {device_name}")
+                        else:
+                            print("未配置特定的音频设备，将使用FFmpeg的自动检测")
                         
                         success = start_ffmpeg_audio_capture(device_name)
                         if success:
@@ -963,81 +1121,46 @@ def gummyAsrTask():
                                                     rate=16000,
                                                     input=True)
                     else:
-                        print("未找到FFmpeg，尝试备用方案...")
+                        print("未找到FFmpeg，尝试虚拟音频设备...")
                         
-                        # 尝试使用sounddevice作为备用方案
-                        if SOUNDDEVICE_AVAILABLE:
-                            print("尝试使用sounddevice捕获音频...")
-                            success = start_sounddevice_capture()
-                            if success:
-                                print("Sounddevice音频捕获启动成功")
-                                mic = None
-                                audio_stream = None
-                            else:
-                                print("Sounddevice启动失败，尝试虚拟音频设备...")
-                                # 尝试使用虚拟音频设备
-                                virtual_devices = get_virtual_audio_devices()
-                                if virtual_devices and current_system_device is not None:
-                                    try:
-                                        mic = pyaudio.PyAudio()
-                                        device_info = mic.get_device_info_by_index(current_system_device)
-                                        print(f"尝试连接到虚拟音频设备: {device_info['name']}")
-                                        
-                                        audio_stream = mic.open(
-                                            format=pyaudio.paInt16,
-                                            channels=1,
-                                            rate=16000,
-                                            input=True,
-                                            input_device_index=current_system_device,
-                                            frames_per_buffer=3200
-                                        )
-                                        print(f"已连接到虚拟音频设备: {device_info['name']}")
-                                    except Exception as e:
-                                        print(f"连接虚拟音频设备失败: {e}")
-                                        # 最后回退到麦克风
-                                        mic = pyaudio.PyAudio()
-                                        audio_stream = mic.open(format=pyaudio.paInt16,
-                                                                channels=1,
-                                                                rate=16000,
-                                                                input=True)
-                                        print("回退到麦克风录音")
-                                else:
-                                    # 最后回退到麦克风
-                                    mic = pyaudio.PyAudio()
-                                    audio_stream = mic.open(format=pyaudio.paInt16,
-                                                            channels=1,
-                                                            rate=16000,
-                                                            input=True)
-                                    print("回退到麦克风录音")
-                        else:
-                            print("Sounddevice不可用，尝试虚拟音频设备...")
-                            # 尝试使用虚拟音频设备
-                            virtual_devices = get_virtual_audio_devices()
-                            if virtual_devices and current_system_device is not None:
-                                try:
-                                    mic = pyaudio.PyAudio()
-                                    device_info = mic.get_device_info_by_index(current_system_device)
-                                    print(f"尝试连接到虚拟音频设备: {device_info['name']}")
-                                    
-                                    audio_stream = mic.open(
-                                        format=pyaudio.paInt16,
-                                        channels=1,
-                                        rate=16000,
-                                        input=True,
-                                        input_device_index=current_system_device,
-                                        frames_per_buffer=3200
-                                    )
-                                    print(f"已连接到虚拟音频设备: {device_info['name']}")
-                                except Exception as e:
-                                    print(f"连接虚拟音频设备失败: {e}")
-                                    # 最后回退到麦克风
-                                    mic = pyaudio.PyAudio()
-                                    audio_stream = mic.open(format=pyaudio.paInt16,
-                                                            channels=1,
-                                                            rate=16000,
-                                                            input=True)
-                                    print("回退到麦克风录音")
-                            else:
+                        # 尝试使用虚拟音频设备
+                        virtual_devices = get_virtual_audio_devices()
+                        device_index = None
+                        
+                        # 优先使用保存的设备名称查找设备
+                        if current_system_device_name is not None:
+                            device_index = find_audio_device_by_name(current_system_device_name)
+                            if device_index is not None:
+                                print(f"通过设备名称找到虚拟音频设备: {current_system_device_name} (索引: {device_index})")
+                        
+                        # 如果通过名称找不到，且有索引配置，则使用索引
+                        if device_index is None and current_system_device is not None:
+                            device_index = current_system_device
+                            print(f"使用配置的设备索引: {device_index}")
+                        
+                        if virtual_devices and device_index is not None:
+                            try:
+                                mic = pyaudio.PyAudio()
+                                device_info = mic.get_device_info_by_index(device_index)
+                                print(f"尝试连接到虚拟音频设备: {device_info['name']}")
+                                
+                                audio_stream = mic.open(
+                                    format=pyaudio.paInt16,
+                                    channels=1,
+                                    rate=16000,
+                                    input=True,
+                                    input_device_index=device_index,
+                                    frames_per_buffer=3200
+                                )
+                                print(f"已连接到虚拟音频设备: {device_info['name']}")
+                                
+                                # 保存设备名称以备下次使用
+                                if current_system_device_name != device_info['name']:
+                                    current_system_device_name = device_info['name']
+                                    # 自动保存到配置文件
+                                    save_config()
+                            except Exception as e:
+                                print(f"连接虚拟音频设备失败: {e}")
                                 # 最后回退到麦克风
                                 mic = pyaudio.PyAudio()
                                 audio_stream = mic.open(format=pyaudio.paInt16,
@@ -1045,6 +1168,14 @@ def gummyAsrTask():
                                                         rate=16000,
                                                         input=True)
                                 print("回退到麦克风录音")
+                        else:
+                            # 最后回退到麦克风
+                            mic = pyaudio.PyAudio()
+                            audio_stream = mic.open(format=pyaudio.paInt16,
+                                                    channels=1,
+                                                    rate=16000,
+                                                    input=True)
+                            print("回退到麦克风录音")
                 else:
                     # 默认使用麦克风
                     mic = pyaudio.PyAudio()
@@ -1068,12 +1199,6 @@ def gummyAsrTask():
             except Exception as e:
                 print(f"停止FFmpeg时出错: {e}")
             
-            # 停止sounddevice流
-            try:
-                stop_sounddevice_capture()
-            except Exception as e:
-                print(f"停止sounddevice时出错: {e}")
-            
             if audio_stream is None:
                 print('audio_stream is None')
                 return
@@ -1096,6 +1221,18 @@ def gummyAsrTask():
             translation_result: TranslationResult,
             usage,
         ) -> None:
+            # 添加调试信息：显示收到的事件
+            event_counter = getattr(self, '_event_counter', 0)
+            event_counter += 1
+            setattr(self, '_event_counter', event_counter)
+            
+            if event_counter % 10 == 0 or event_counter <= 5:
+                print(f"收到第 {event_counter} 个ASR事件, request_id: {request_id}")
+                if transcription_result:
+                    print(f"  转录结果: 有 {len(transcription_result.words)} 个词")
+                if translation_result:
+                    print(f"  翻译结果: 存在")
+            
             new_chinese_words = ''
             new_target_language_words = ''
             is_sentence_end = False
@@ -1105,7 +1242,7 @@ def gummyAsrTask():
                 for i, word in enumerate(transcription_result.words):
                     if word.fixed:
                         if i >= self.zh_word_ptr:
-                            # print('new fixed ch word: ', word.text)
+                            print(f'新的固定中文词: {word.text}')
                             new_chinese_words += word.text
                             self.zh_word_ptr += 1
 
@@ -1118,8 +1255,7 @@ def gummyAsrTask():
                             target_language_translation.words):
                         if word.fixed:
                             if i >= self.tg_word_ptr:
-                                # print('new fixed {} word: '.format(
-                                #     target_language, word.text))
+                                print(f'新的固定翻译词: {word.text}')
                                 asr_fixed_words.put([word.text, False])
                                 new_target_language_words += word.text
                                 self.tg_word_ptr += 1
@@ -1135,9 +1271,17 @@ def gummyAsrTask():
 
     callback = Callback()
 
+    # 检查API状态
+    check_api_status()
+    
     # Set up the ASR translator
     asr_model = config.get('asr_model', 'gummy-realtime-v1')
     print(f"使用ASR模型: {asr_model}")
+    
+    # 如果API调用被禁用，给出警告
+    if not enable_api_calls:
+        print("⚠️  警告: API调用已禁用，translator将不会工作。请在设置中启用API调用。")
+        return  # 直接返回，不启动translator
     
     translator = TranslationRecognizerRealtime(
         model=asr_model,
@@ -1202,8 +1346,8 @@ def gummyAsrTask():
                 time.sleep(0.1)
                 continue
             
-            if audio_source == 'system' and (ffmpeg_process is not None or sounddevice_stream is not None):
-                # 从FFmpeg队列或sounddevice队列读取音频数据
+            if audio_source == 'system' and ffmpeg_process is not None:
+                # 从FFmpeg队列读取音频数据
                 try:
                     data = system_audio_queue.get(timeout=0.1)
                 except queue.Empty:
@@ -1220,8 +1364,34 @@ def gummyAsrTask():
             
             if data and not listening_paused and not translator_stopped:  # 检查translator状态
                 try:
-                    translator.send_audio_frame(data)
-                    saved_mic_audio_file.write(data)
+                    # 添加音频音量检测
+                    import struct
+                    if len(data) >= 2:
+                        # 计算音频音量（RMS）
+                        samples = struct.unpack('<' + 'h' * (len(data) // 2), data)
+                        rms = (sum(sample * sample for sample in samples) / len(samples)) ** 0.5
+                        volume_db = 20 * (rms / 32767) if rms > 0 else -100
+                        
+                        # 添加调试信息：显示发送的音频数据大小和音量
+                        if hasattr(translator, 'send_audio_frame'):
+                            sent_frame_counter = getattr(translator, '_sent_frame_counter', 0)
+                            sent_frame_counter += 1
+                            setattr(translator, '_sent_frame_counter', sent_frame_counter)
+                            
+                            # 每100帧显示一次调试信息，但如果检测到有声音则立即显示
+                            if sent_frame_counter % 100 == 0 or (rms > 1000 and sent_frame_counter % 10 == 0):
+                                print(f"已发送 {sent_frame_counter} 个音频帧，数据大小: {len(data)} 字节，音量: RMS={rms:.1f}, dB={volume_db:.1f}")
+                                if rms > 1000:
+                                    print(f"  🔊 检测到音频信号！")
+                                else:
+                                    print(f"  🔇 音频信号很微弱或为静音")
+                            
+                            translator.send_audio_frame(data)
+                            saved_mic_audio_file.write(data)
+                        else:
+                            print("警告: translator没有send_audio_frame方法")
+                    else:
+                        print(f"警告: 音频数据太短 ({len(data)} 字节)")
                 except Exception as e:
                     print(f"发送音频数据错误: {e}")
                     if "has stopped" in str(e):
@@ -1446,6 +1616,15 @@ class SettingsDialog(wx.Dialog):
         self.audio_source.SetSelection(0 if self.config.get('audio_source') == 'microphone' else 1)
         audio_sizer.Add(self.audio_source, 0, wx.EXPAND | wx.ALL, 5)
         
+        # 系统音频设备选择
+        audio_sizer.Add(wx.StaticText(audio_panel, label="系统音频设备:"), 0, wx.ALL, 5)
+        self.setup_audio_device_choice(audio_panel, audio_sizer)
+        
+        # 刷新设备列表按钮
+        refresh_btn = wx.Button(audio_panel, label="刷新设备列表")
+        refresh_btn.Bind(wx.EVT_BUTTON, self.on_refresh_devices)
+        audio_sizer.Add(refresh_btn, 0, wx.ALL, 5)
+        
         # 目标语言
         audio_sizer.Add(wx.StaticText(audio_panel, label="翻译目标语言:"), 0, wx.ALL, 5)
         lang_choices = ["zh", "en", "ja", "ko", "fr", "es", "de", "ru"]
@@ -1556,6 +1735,130 @@ class SettingsDialog(wx.Dialog):
         message = f"设置测试结果:\n\n{ffmpeg_status}\n{dashscope_status}\n{siliconflow_status}"
         wx.MessageBox(message, "设置测试", wx.OK | wx.ICON_INFORMATION)
     
+    def setup_audio_device_choice(self, parent, sizer):
+        """设置音频设备选择控件"""
+        # 获取音频设备列表
+        devices = self.get_all_audio_devices()
+        device_names = []
+        
+        for device in devices:
+            if device['type'] == 'dshow':
+                device_names.append(f"{device['name']} [FFmpeg]")
+            else:
+                # PyAudio设备，使用更详细的标签
+                label = device.get('label', 'PyAudio')
+                if device.get('is_virtual', False):
+                    device_names.append(f"{device['name']} [{label}]")
+                else:
+                    device_names.append(f"{device['name']} [PyAudio]")
+        
+        self.audio_device_choice = wx.Choice(parent, choices=device_names)
+        self.audio_devices = devices  # 保存设备信息
+        
+        # 设置当前选择的设备
+        current_device_name = self.config.get('current_system_device_name', None)
+        if current_device_name:
+            for i, device in enumerate(devices):
+                if device['name'] == current_device_name:
+                    self.audio_device_choice.SetSelection(i)
+                    break
+        
+        sizer.Add(self.audio_device_choice, 0, wx.EXPAND | wx.ALL, 5)
+    
+    def get_all_audio_devices(self):
+        """获取所有可用的音频设备（FFmpeg + PyAudio）"""
+        devices = []
+        
+        # 获取FFmpeg设备
+        try:
+            ffmpeg_devices = get_windows_audio_devices()
+            for device in ffmpeg_devices:
+                devices.append({
+                    'name': device['name'],
+                    'type': 'dshow',
+                    'index': device['index']
+                })
+        except Exception as e:
+            print(f"获取FFmpeg设备失败: {e}")
+        
+        # 获取PyAudio设备（包括VB-Cable等虚拟音频设备）
+        try:
+            # 先获取所有PyAudio设备
+            p = pyaudio.PyAudio()
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                if device_info['maxInputChannels'] > 0:  # 只添加输入设备
+                    device_name = device_info['name']
+                    
+                    # 检查是否为VB-Cable或其他虚拟设备
+                    is_virtual = False
+                    device_label = "PyAudio"
+                    
+                    # VB-Cable检测
+                    vb_keywords = ['cable', 'vb-audio', 'vb-cable']
+                    if any(keyword in device_name.lower() for keyword in vb_keywords):
+                        is_virtual = True
+                        device_label = "VB-Cable"
+                    
+                    # 其他虚拟设备检测
+                    elif any(keyword in device_name.lower() for keyword in 
+                            ['virtual', 'voicemeeter', 'vac', 'line', 'aux']):
+                        is_virtual = True
+                        device_label = "Virtual"
+                    
+                    devices.append({
+                        'name': device_name,
+                        'type': 'pyaudio',
+                        'index': i,
+                        'label': device_label,
+                        'is_virtual': is_virtual
+                    })
+            
+            p.terminate()
+        except Exception as e:
+            print(f"获取PyAudio设备失败: {e}")
+        
+        return devices
+    
+    def on_refresh_devices(self, event):
+        """刷新音频设备列表"""
+        # 重新获取设备列表
+        devices = self.get_all_audio_devices()
+        device_names = []
+        
+        for device in devices:
+            if device['type'] == 'dshow':
+                device_names.append(f"{device['name']} [FFmpeg]")
+            else:
+                # PyAudio设备，使用更详细的标签
+                label = device.get('label', 'PyAudio')
+                if device.get('is_virtual', False):
+                    device_names.append(f"{device['name']} [{label}]")
+                else:
+                    device_names.append(f"{device['name']} [PyAudio]")
+        
+        # 更新选择控件
+        current_selection = self.audio_device_choice.GetSelection()
+        self.audio_device_choice.Clear()
+        self.audio_device_choice.AppendItems(device_names)
+        self.audio_devices = devices
+        
+        # 尝试恢复之前的选择
+        if current_selection >= 0 and current_selection < len(devices):
+            self.audio_device_choice.SetSelection(current_selection)
+        
+        # 统计VB-Cable设备数量
+        vb_count = sum(1 for device in devices if device.get('label') == 'VB-Cable')
+        virtual_count = sum(1 for device in devices if device.get('is_virtual', False))
+        
+        message = f"已刷新音频设备列表\n找到 {len(devices)} 个设备"
+        if vb_count > 0:
+            message += f"\n其中包含 {vb_count} 个VB-Cable设备"
+        if virtual_count > 0:
+            message += f"\n共 {virtual_count} 个虚拟音频设备"
+        
+        wx.MessageBox(message, "刷新完成", wx.OK | wx.ICON_INFORMATION)
+    
     def get_config(self):
         """获取用户设置的配置"""
         config = {}
@@ -1580,6 +1883,16 @@ class SettingsDialog(wx.Dialog):
         config['audio_source'] = 'microphone' if self.audio_source.GetSelection() == 0 else 'system'
         config['target_language'] = self.target_language.GetStringSelection()
         config['enable_tts'] = self.enable_tts.GetValue()
+        
+        # 音频设备设置
+        device_selection = self.audio_device_choice.GetSelection()
+        if device_selection >= 0 and device_selection < len(self.audio_devices):
+            selected_device = self.audio_devices[device_selection]
+            config['current_system_device'] = selected_device['index']
+            config['current_system_device_name'] = selected_device['name']
+        else:
+            config['current_system_device'] = None
+            config['current_system_device_name'] = None
         
         return config
 
@@ -2336,25 +2649,17 @@ if __name__ == '__main__':
         
         # 如果选择系统音频，检查可用的捕获方法
         if audio_source == 'system':
-            sounddevice_available = SOUNDDEVICE_AVAILABLE
-            
             if ffmpeg_available:
                 # FFmpeg可用，直接启动
                 print(f"✅ 使用FFmpeg进行系统音频捕获")
-            elif sounddevice_available:
-                # FFmpeg不可用，但有Sounddevice，提示并继续
-                print(f"ℹ️  FFmpeg不可用，将使用Sounddevice作为备用方案")
-                print(f"💡 提示：安装FFmpeg可获得更好的兼容性")
             else:
-                # 两种方法都不可用，需要用户确认
+                # FFmpeg不可用，需要用户确认
                 print(f"⚠️  系统音频捕获组件不可用!")
                 print(f"   FFmpeg: ❌ 不可用")
-                print(f"   Sounddevice: ❌ 不可用")
                 print(f"\n建议解决方案:")
                 print(f"1. 安装FFmpeg: winget install FFmpeg")
-                print(f"2. 安装Python库: pip install sounddevice numpy")
-                print(f"3. 安装虚拟音频设备: VB-CABLE, VoiceMeeter等")
-                print(f"4. 切换到麦克风模式")
+                print(f"2. 安装虚拟音频设备: VB-CABLE, VoiceMeeter等")
+                print(f"3. 切换到麦克风模式")
                 
                 continue_choice = input("\n是否仍要继续启动程序？(y/n): ").strip().lower()
                 if continue_choice not in ['y', 'yes', '是']:
@@ -2383,7 +2688,6 @@ if __name__ == '__main__':
     finally:
         # 清理资源
         stop_ffmpeg_audio_capture() 
-        stop_sounddevice_capture()
         if 'audio_stream' in globals() and audio_stream is not None:
             audio_stream.stop_stream()
             audio_stream.close()
