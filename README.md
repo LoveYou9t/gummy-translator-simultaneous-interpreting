@@ -67,8 +67,7 @@ pip install -r requirements.txt
       - **方案一 (推荐)**: 大多数 Realtek 声卡用户，只需在 Windows 声音设置中启用“立体声混音”即可。
       - **方案二 (通用)**: 如果没有“立体声混音”，您需要配置虚拟音频设备。
 
-\<details\>
-\<summary\>\<b\>点击查看 VB-CABLE 配置教程\</b\>\</summary\>
+    **VB-CABLE 配置教程**
 
 1.  **下载并安装 VB-CABLE**
 
@@ -89,8 +88,6 @@ pip install -r requirements.txt
       - 切换到“侦听”选项卡，勾选 **“侦听此设备”**。
       - 在下方的“通过此设备播放”下拉菜单中，选择您**实际使用的耳机或扬声器**（例如 `扬声器 (Realtek High Definition Audio)`）。
       - 点击“应用”保存。
-
-\</details\>
 
 ## 🎹 使用方法
 
@@ -146,9 +143,10 @@ python gummy_translator.py
 
 本项目遵循 **MIT License**。
 
-本项目遵循MIT许可证，参考使用了以下项目：
-[aliyun/alibabacloud-bailian-speech-demo]
-Source: alibabacloud-bailian-speech-demo
-License: MIT
-Copyright (c) [2024] [Alibaba Cloud]
+本项目遵循MIT许可证，参考使用了以下项目：\n
+[aliyun/alibabacloud-bailian-speech-demo]\n
+Source: alibabacloud-bailian-speech-demo\n
+License: MIT\n
+Copyright (c) [2024] [Alibaba Cloud]\n
+
 
