@@ -2,9 +2,9 @@
 
 ## 项目描述
 
-# Gummy Translator 同声传译工具
+# Gummy Translator Simultaneous Interpreting同声传译工具
 
-Gummy Translator 是一个基于 DashScope 语音识别与翻译 API、SiliconFlow CosyVoice TTS 语音合成、支持系统音频/麦克风输入的同声传译桌面工具。支持 Windows 平台，具备浮动字幕、音频源灵活切换、配置可视化等特性。
+Gummy Translator Simultaneous Interpreting 是一个基于 DashScope 语音识别与翻译 API、SiliconFlow CosyVoice TTS 语音合成、支持系统音频/麦克风输入的同声传译桌面工具。支持 Windows 平台，具备浮动字幕、音频源灵活切换、配置可视化等特性。
 
 ## 主要特性
 - 支持系统音频（如视频、会议、音乐等）和麦克风音频输入
@@ -15,11 +15,39 @@ Gummy Translator 是一个基于 DashScope 语音识别与翻译 API、SiliconFl
 - 浮动字幕窗口，便于字幕展示
 - 支持 FFmpeg、sounddevice、虚拟音频设备多种音频采集方案
 
-## 快速开始
+## 快速开始(开发)
 1. 安装依赖（见下方 requirements 部分）
 2. 配置 API Key（DashScope、SiliconFlow）
 3. 运行 `gummy_translator.py`
-4. 按提示选择音频输入源，开始同声传译
+4. 开始同声传译
+
+## 快速开始(用户)
+1. 下载发行版
+2. 启动后Alt+S打开设置配置\bin\ffmpeg.exe路径和DashScope API Key
+3. Realtek声卡用户打开立体声混音即可
+   如果没有立体声混音则需要安装VB-CABLE
+操作步骤：
+
+    **下载并安装VB-CABLE：**
+    前往官网 vb-audio.com/Cable/ 下载
+    解压文件，找到对应您系统的 VBCABLE_Setup_x64.exe (64位) 或 VBCABLE_Setup.exe (32位)
+    以管理员身份运行 安装程序，然后根据提示重启电脑
+
+    **设置系统主输出：**
+    再次打开Windows的“声音设置”
+    在“输出”部分，将您的默认输出设备更改为 CABLE Input (VB-Audio Virtual Cable)
+    重要： 完成这一步后，您的电脑会“变哑”，听不到任何声音了。这是正常的，因为声音已经被发送到了虚拟电缆里。
+
+    **让自己也能听到声音（关键步骤）：**
+    您还需要把进入虚拟电缆的声音“监听”到自己的耳机或音箱里
+    回到Windows的“声音控制面板” -> “录制”选项卡
+    找到 CABLE Output 这个设备，右键点击 -> “属性”
+    在弹出的窗口中，切换到“侦听”选项卡
+    勾选 “侦听此设备”
+    在下方的“通过此设备播放”下拉菜单中，选择您真正用来听声音的设备（例如，您的独立声卡的 扬声器 或 Headphones 1/2）
+    点击“应用”
+
+4. 开始同声传译
 
 ## PREREQUISITES
 - **操作系统**：Windows 10/11
@@ -143,4 +171,5 @@ python gummy_translator.py
   - Source: [alibabacloud-bailian-speech-demo](https://github.com/aliyun/alibabacloud-bailian-speech-demo)
   - License: MIT  
   - Copyright (c) [2024] [Alibaba Cloud]
+
 
