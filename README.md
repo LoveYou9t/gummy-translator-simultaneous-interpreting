@@ -6,8 +6,9 @@
 
 Gummy Translator 是一个基于 **[DashScope 语音识别与翻译 API](https://help.aliyun.com/zh/dashscope/developer-reference/quickstart-2)**、**[SiliconFlow CosyVoice TTS 语音合成](https://www.siliconflow.cn/)** 的桌面同声传译工具。它能实时捕捉并翻译您电脑的系统声音或麦克风输入，并通过浮动字幕和语音朗读为您提供流畅的翻译体验。
 
-*<img width="886" height="103" alt="image" src="https://github.com/user-attachments/assets/89305856-1163-47f5-9281-daa0287f698e" />
-*
+
+<img width="886" height="103" alt="image" src="https://github.com/user-attachments/assets/89305856-1163-47f5-9281-daa0287f698e" />
+
 
 ## ✨ 主要特性
 
@@ -143,10 +144,11 @@ python gummy_translator.py
 
 本项目遵循 **MIT License**。
 
-本项目遵循MIT许可证，参考使用了以下项目：\n
-[aliyun/alibabacloud-bailian-speech-demo]\n
-Source: alibabacloud-bailian-speech-demo\n
-License: MIT\n
-Copyright (c) [2024] [Alibaba Cloud]\n
+本项目遵循MIT许可证，参考使用了以下项目：  
+[aliyun/alibabacloud-bailian-speech-demo]  
+Source: alibabacloud-bailian-speech-demo
+License: MIT  
+Copyright (c) [2024] [Alibaba Cloud]  
+
 
 
