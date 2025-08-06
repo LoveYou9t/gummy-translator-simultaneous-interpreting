@@ -1,7 +1,3 @@
-# gummy-translator-simultaneous-interpreting
-
-## 项目描述
-
 # Gummy Translator Simultaneous Interpreting同声传译工具
 
 Gummy Translator Simultaneous Interpreting 是一个基于 DashScope 语音识别与翻译 API、SiliconFlow CosyVoice TTS 语音合成、支持系统音频/麦克风输入的同声传译桌面工具。支持 Windows 平台，具备浮动字幕、音频源灵活切换、配置可视化等特性。
@@ -171,5 +167,6 @@ python gummy_translator.py
   - Source: [alibabacloud-bailian-speech-demo](https://github.com/aliyun/alibabacloud-bailian-speech-demo)
   - License: MIT  
   - Copyright (c) [2024] [Alibaba Cloud]
+
 
 
