@@ -130,9 +130,11 @@ python gummy_translator.py
 ```
 #### 功能（快捷键）
 
-- Alt+T/t 切换颜色模式（默认浅色模式）
-- Alt+up/down 增减亮度
-- Alt+s 启用/禁用tts（默认禁用）
+  Alt+A: 切换音频源（麦克风/系统音频）
+  Alt+D: 选择系统音频设备
+  Alt+S: 打开设置
+  Alt+T: 切换颜色模式
+  Ctrl+H: 切换标题栏
 
 ## 许可证
 
@@ -141,3 +143,4 @@ python gummy_translator.py
   - Source: [alibabacloud-bailian-speech-demo](https://github.com/aliyun/alibabacloud-bailian-speech-demo)
   - License: MIT  
   - Copyright (c) [2024] [Alibaba Cloud]
+
