@@ -1,14 +1,6 @@
 # Gummy Translator Simultaneous Interpreting
 
-\<div align="center"\>
-
-[](https://www.python.org/)
-[](https://www.microsoft.com/windows/)
-[](https://opensource.org/licenses/MIT)
-
 **一个支持系统音频与麦克风输入的桌面同声传译工具**
-
-\</div\>
 
 -----
 
@@ -154,8 +146,9 @@ python gummy_translator.py
 
 本项目遵循 **MIT License**。
 
-本项目参考了以下优秀项目的部分实现：
+本项目遵循MIT许可证，参考使用了以下项目：
+[aliyun/alibabacloud-bailian-speech-demo]
+Source: alibabacloud-bailian-speech-demo
+License: MIT
+Copyright (c) [2024] [Alibaba Cloud]
 
-  - **[aliyun/alibabacloud-bailian-speech-demo](https://github.com/aliyun/alibabacloud-bailian-speech-demo)**
-      - *License: MIT*
-      - *Copyright (c) 2024, Alibaba Cloud*
