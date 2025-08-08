@@ -37,7 +37,6 @@ Gummy Translator 是一个基于 **[DashScope 语音识别与翻译 API](https:/
 
 ```bash
 git clone https://github.com/LoveYou9t/gummy-translator-simultaneous-interpreting.git
-cd gummy-translator-simultaneous-interpreting
 ```
 
 或者，您也可以直接下载项目的 [ZIP 压缩包](https://github.com/LoveYou9t/gummy-translator-simultaneous-interpreting/releases) 并解压。
@@ -149,6 +148,7 @@ python gummy_translator.py
 Source: alibabacloud-bailian-speech-demo
 License: MIT  
 Copyright (c) [2024] [Alibaba Cloud]  
+
 
 
 
